@@ -275,6 +275,9 @@ func (t *Task) updateProgressStep() {
 func (t *Task) buildGroupsSnapshot() []types.DuplicateGroup {
 	var groups []types.DuplicateGroup
 	for h, files := range t.hashGroups {
+		if h == "" {
+			continue
+		}
 		if len(files) < 2 {
 			continue
 		}
