@@ -201,8 +201,9 @@ func NewRouter() http.Handler {
 	// API: 删除确认（移动到备份目录）
 	mux.HandleFunc("/api/delete/confirm", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			CleanEmptyDirs bool `json:"cleanEmptyDirs"`
-			DirectToTrash  bool `json:"directToTrash"`
+			CleanEmptyDirs bool   `json:"cleanEmptyDirs"`
+			DeleteMode     string `json:"deleteMode"`   // "backup" | "trash" | "permanent"
+			DirectToTrash  bool   `json:"directToTrash"` // 兼容旧参数：true 等同于 "trash"
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		state.mu.RLock()
@@ -224,12 +225,21 @@ func NewRouter() http.Handler {
 		var failed map[string]string
 		var manifest string
 		mode := "backup"
-		if req.DirectToTrash {
+		if req.DeleteMode == "" && req.DirectToTrash {
+			req.DeleteMode = "trash"
+		}
+		switch req.DeleteMode {
+		case "trash":
 			moved, failed = backup.MoveToTrash(toDelete)
 			manifest = ""
 			mode = "trash"
-		} else {
+		case "permanent":
+			moved, failed = backup.DeletePermanently(toDelete)
+			manifest = ""
+			mode = "permanent"
+		default:
 			moved, failed, manifest = backup.MoveToBackupWithManifest(toDelete, backupDir)
+			mode = "backup"
 		}
 		var cleaned []string
 		var cleanFailed map[string]string
@@ -349,7 +359,7 @@ const indexHTML = `<!doctype html>
         keep_highest_version: "保留最大版本号",
         delete_preview: "删除预览",
         clean_empty_dirs: "清空空文件夹",
-        direct_trash: "直接删除(放入回收站)",
+        direct_trash: "放入回收站",
         confirm_delete: "确认删除",
         restore_last: "恢复上次删除",
         rules_status: "规则状态",
@@ -357,7 +367,8 @@ const indexHTML = `<!doctype html>
         delete_result: "删除结果",
         restore_result: "恢复结果",
         confirm_delete_prompt: "确认执行删除（移动到备份目录）吗？",
-        confirm_direct_trash_prompt: "确认直接删除并放入系统回收站吗？（不可恢复）",
+        confirm_delete_trash_prompt: "确认删除并放入系统回收站吗？（可在系统回收站恢复）",
+        confirm_delete_perm_prompt: "确认直接永久删除吗？（不可恢复，谨慎操作）",
         confirm_restore_prompt: "确认恢复上次删除的文件吗？（若目标已存在将跳过）"
       },
       en: {
@@ -403,6 +414,8 @@ const indexHTML = `<!doctype html>
         delete_result: "Delete Result",
         restore_result: "Restore Result",
         confirm_delete_prompt: "Confirm delete (move to backup)?",
+        confirm_delete_trash_prompt: "Confirm delete to OS Trash? (restore via system Trash)",
+        confirm_delete_perm_prompt: "Confirm permanent delete? (cannot be recovered)",
         confirm_restore_prompt: "Restore last deleted files? (skip if exists)"
       }
     };
@@ -451,7 +464,7 @@ const indexHTML = `<!doctype html>
         ["label-keep-version","keep_highest_version"],
         ["btn-preview","delete_preview"],
         ["label-clean-empty","clean_empty_dirs"],
-        ["label-direct-trash","direct_trash"],
+        ["label-delete-mode","delete_mode"],
         ["btn-confirm","confirm_delete"],
         ["btn-restore","restore_last"],
         ["rules-status-title","rules_status"],
@@ -484,6 +497,16 @@ const indexHTML = `<!doctype html>
       applyOptions(p1o); applyOptions(p2o); applyOptions(p3o);
       const langSel = document.getElementById("lang");
       if (langSel) langSel.value = getLang();
+      const modeSel = document.getElementById("deleteMode");
+      if (modeSel) {
+        const opts = modeSel.querySelectorAll("option");
+        opts.forEach(opt => {
+          const v = opt.getAttribute("value");
+          if (v === "backup") opt.textContent = getLang()==="zh" ? "删除进入备份" : "Delete to Backup";
+          else if (v === "trash") opt.textContent = getLang()==="zh" ? "删除进入回收站" : "Delete to Trash";
+          else if (v === "permanent") opt.textContent = getLang()==="zh" ? "直接删除(谨慎操作)" : "Permanent Delete (Danger)";
+        });
+      }
     }
     async function ping() {
       const res = await fetch('/api/health');
@@ -540,11 +563,12 @@ const indexHTML = `<!doctype html>
       document.getElementById('preview').textContent = JSON.stringify(data, null, 2);
     }
     async function confirmDelete() {
-      const directTrash = document.getElementById('directToTrash').checked;
-      const ok = confirm(t(directTrash ? 'confirm_direct_trash_prompt' : 'confirm_delete_prompt'));
+      const mode = document.getElementById('deleteMode').value || 'backup';
+      const promptKey = mode === 'trash' ? 'confirm_delete_trash_prompt' : (mode === 'permanent' ? 'confirm_delete_perm_prompt' : 'confirm_delete_prompt');
+      const ok = confirm(t(promptKey));
       if (!ok) return;
       const cleanEmptyDirs = document.getElementById('cleanEmptyDirs').checked;
-      const res = await fetch('/api/delete/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanEmptyDirs, directToTrash: directTrash }) });
+      const res = await fetch('/api/delete/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanEmptyDirs, deleteMode: mode }) });
       const data = await res.json();
       document.getElementById('confirm').textContent = JSON.stringify(data, null, 2);
     }
@@ -679,7 +703,13 @@ const indexHTML = `<!doctype html>
       <div class="bar">
         <button id="btn-preview" onclick="previewDelete()">删除预览</button>
         <span class="opt"><label id="label-clean-empty">清空空文件夹</label><input type="checkbox" id="cleanEmptyDirs" checked></span>
-        <span class="opt"><label id="label-direct-trash">直接删除(放入回收站)</label><input type="checkbox" id="directToTrash"></span>
+        <span class="opt"><label id="label-delete-mode">删除模式</label>
+          <select id="deleteMode">
+            <option value="backup">删除进入备份</option>
+            <option value="trash">删除进入回收站</option>
+            <option value="permanent">直接删除(谨慎操作)</option>
+          </select>
+        </span>
         <button id="btn-confirm" onclick="confirmDelete()">确认删除</button>
         <button id="btn-restore" onclick="restoreLast()">恢复上次删除</button>
       </div>

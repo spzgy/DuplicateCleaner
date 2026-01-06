@@ -65,7 +65,7 @@ http://localhost:8713/  # 或你的自定义端口
 - 状态与结果每秒自动刷新；可在界面直接暂停/恢复/结束扫描。
 - 规则自动更新：修改优先级、保留目录与勾选项后立即生效（无需“更新规则”按钮）。
 - 多语言支持：自动识别浏览器语言（非中文默认英文），并支持在界面手动切换中英文。
-- 直接删除(放入回收站)：在“确认删除”旁的勾选项，默认不勾选。勾选后删除会进入系统回收站，不会备份（macOS: ~/.Trash；Linux: freedesktop 规范 ~/.local/share/Trash；Windows: 回收站）。
+- 删除模式下拉：提供“删除进入备份”“删除进入回收站”“直接删除(谨慎操作)”三种模式；默认“删除进入备份”。回收站路径：macOS ~/.Trash；Linux ~/.local/share/Trash（freedesktop 规范）；Windows 回收站。
 
 ## 界面预览
 ![DuplicateCleaner Web 界面（中文）](./docs/user-guide/assets/duplicatecleaner-ui-zh.png)
@@ -119,8 +119,10 @@ http://localhost:8713/  # 或你的自定义端口
 - 恢复上次删除
   - 将备份文件恢复至原路径，若目标路径已存在则跳过以避免覆盖。
   - 用于撤销最近一次删除；如需支持更早批次，可扩展为多清单归档并在界面选择批次。
-- 回收站直删模式
-  - 开启“直接删除(放入回收站)”后，删除将进入系统回收站（macOS: ~/.Trash；Linux: freedesktop 规范 ~/.local/share/Trash；Windows: 回收站），不生成恢复清单，无法通过“恢复上次删除”找回。
+- 删除模式
+  - 删除进入备份：移动到 Duplicate_Backup 并生成 restore_last.json，可通过“恢复上次删除”恢复
+  - 删除进入回收站：进入系统回收站，不生成恢复清单；可在系统回收站恢复
+  - 直接删除(谨慎操作)：永久删除，不可恢复
 
 ## API 使用
 
@@ -170,7 +172,7 @@ curl -X POST http://localhost:8713/api/rules \
 curl -X POST http://localhost:8713/api/delete/preview
 ```
 
-确认删除（移动到备份目录）：
+确认删除（移动到备份目录，默认）：
 ```bash
 curl -X POST http://localhost:8713/api/delete/confirm
 ```
@@ -182,11 +184,17 @@ curl -X POST http://localhost:8713/api/delete/confirm \
   -d '{ "cleanEmptyDirs": true }'
 ```
 
-直接删除（回收站）：
+- 删除进入回收站：
 ```bash
 curl -X POST http://localhost:8713/api/delete/confirm \
   -H "Content-Type: application/json" \
-  -d '{ "directToTrash": true }'
+  -d '{ "deleteMode": "trash" }'
+```
+直接删除（谨慎操作）：
+```bash
+curl -X POST http://localhost:8713/api/delete/confirm \
+  -H "Content-Type: application/json" \
+  -d '{ "deleteMode": "permanent" }'
 ```
 恢复上次删除：
 ```bash

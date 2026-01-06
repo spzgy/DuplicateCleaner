@@ -64,7 +64,7 @@ http://localhost:8713/  # or your custom port
 - Auto-refresh status and results every second; pause/resume/stop a running scan directly from the UI.
 - Rules auto-update: changes to priority, keep-dirs and flags take effect immediately (no extra button needed).
 - Bilingual UI: auto-detects browser language (non-Chinese → English by default) and allows manual switching between English and Chinese.
-- Direct Delete (Trash): optional checkbox next to Confirm Delete; default off. When enabled, files are moved to OS Trash without backup (macOS: ~/.Trash; Linux: freedesktop ~/.local/share/Trash; Windows: Recycle Bin).
+- Delete Mode dropdown: Backup, Trash, Permanent (Danger). Default: Backup. Trash paths: macOS ~/.Trash; Linux ~/.local/share/Trash (freedesktop); Windows Recycle Bin.
 
 ## UI Preview
 ![DuplicateCleaner Web UI (English)](./docs/user-guide/assets/duplicatecleaner-ui-en.png)
@@ -120,9 +120,10 @@ http://localhost:8713/  # or your custom port
   - Restores files from the last manifest back to their original paths.
   - Skips if target already exists to avoid overwriting.
   - Intended to undo the most recent delete; historical batches can be supported by extending manifest archival.
-- Direct Delete Mode
-  - When the “Direct Delete (Trash)” option is enabled, deletion goes to the OS Trash (macOS: ~/.Trash; Linux: freedesktop ~/.local/share/Trash). No backup manifest is created and “Restore Last” does not apply.
-  - Windows: moves to Recycle Bin via Shell API.
+- Delete Modes
+  - Backup: move to Duplicate_Backup and create restore_last.json; can be restored via “Restore Last”
+  - Trash: move to OS Trash; no manifest; restore via system Trash (macOS ~/.Trash; Linux freedesktop ~/.local/share/Trash; Windows Recycle Bin)
+  - Permanent (Danger): permanently delete; cannot be recovered
 
 ## API
 
@@ -188,7 +189,13 @@ Confirm deletion to OS Trash (no backup):
 ```bash
 curl -X POST http://localhost:8713/api/delete/confirm \
   -H "Content-Type: application/json" \
-  -d '{ "directToTrash": true }'
+  -d '{ "deleteMode": "trash" }'
+```
+Confirm permanent deletion (danger):
+```bash
+curl -X POST http://localhost:8713/api/delete/confirm \
+  -H "Content-Type: application/json" \
+  -d '{ "deleteMode": "permanent" }'
 ```
 Restore last deletion:
 ```bash
