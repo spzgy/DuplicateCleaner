@@ -524,6 +524,12 @@ const indexHTML = `<!doctype html>
       const skipSystemDirs = document.getElementById('skipSystemDirs').checked;
       const maxWorkers = parseInt(document.getElementById('maxWorkers').value || '0', 10);
       const chunkSizeBytes = parseInt(document.getElementById('chunkSize').value || '0', 10) * 1024 * 1024;
+      // 先清空界面显示，避免旧数据残留
+      const pf = document.getElementById('pfill'); if (pf) pf.style.width = '0%';
+      const resultsEl = document.getElementById('results'); if (resultsEl) resultsEl.textContent = '';
+      const previewEl = document.getElementById('preview'); if (previewEl) previewEl.textContent = '';
+      const confirmEl = document.getElementById('confirm'); if (confirmEl) confirmEl.textContent = '';
+      const restoreEl = document.getElementById('restore'); if (restoreEl) restoreEl.textContent = '';
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
