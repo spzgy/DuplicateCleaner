@@ -202,6 +202,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/api/delete/confirm", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			CleanEmptyDirs bool `json:"cleanEmptyDirs"`
+			DirectToTrash  bool `json:"directToTrash"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		state.mu.RLock()
@@ -219,7 +220,17 @@ func NewRouter() http.Handler {
 				toDelete = append(toDelete, d.Path)
 			}
 		}
-		moved, failed, manifest := backup.MoveToBackupWithManifest(toDelete, backupDir)
+		var moved []string
+		var failed map[string]string
+		var manifest string
+		mode := "backup"
+		if req.DirectToTrash {
+			moved, failed = backup.MoveToTrash(toDelete)
+			manifest = ""
+			mode = "trash"
+		} else {
+			moved, failed, manifest = backup.MoveToBackupWithManifest(toDelete, backupDir)
+		}
 		var cleaned []string
 		var cleanFailed map[string]string
 		if req.CleanEmptyDirs {
@@ -228,6 +239,7 @@ func NewRouter() http.Handler {
 		logging.LogEvent("logs", logging.Event{
 			Type: "delete_confirm",
 			Data: map[string]any{
+				"mode":      mode,
 				"backupDir": backupDir,
 				"moved":     moved,
 				"failed":    failed,
@@ -237,6 +249,7 @@ func NewRouter() http.Handler {
 			},
 		})
 		writeJSON(w, map[string]any{
+			"mode":      mode,
 			"backupDir": backupDir,
 			"moved":     moved,
 			"failed":    failed,
@@ -336,6 +349,7 @@ const indexHTML = `<!doctype html>
         keep_highest_version: "保留最大版本号",
         delete_preview: "删除预览",
         clean_empty_dirs: "清空空文件夹",
+        direct_trash: "直接删除(放入回收站)",
         confirm_delete: "确认删除",
         restore_last: "恢复上次删除",
         rules_status: "规则状态",
@@ -343,6 +357,7 @@ const indexHTML = `<!doctype html>
         delete_result: "删除结果",
         restore_result: "恢复结果",
         confirm_delete_prompt: "确认执行删除（移动到备份目录）吗？",
+        confirm_direct_trash_prompt: "确认直接删除并放入系统回收站吗？（不可恢复）",
         confirm_restore_prompt: "确认恢复上次删除的文件吗？（若目标已存在将跳过）"
       },
       en: {
@@ -380,6 +395,7 @@ const indexHTML = `<!doctype html>
         keep_highest_version: "Keep Highest Version",
         delete_preview: "Delete Preview",
         clean_empty_dirs: "Clean Empty Folders",
+        direct_trash: "Direct Delete (Trash)",
         confirm_delete: "Confirm Delete",
         restore_last: "Restore Last",
         rules_status: "Rules Status",
@@ -435,6 +451,7 @@ const indexHTML = `<!doctype html>
         ["label-keep-version","keep_highest_version"],
         ["btn-preview","delete_preview"],
         ["label-clean-empty","clean_empty_dirs"],
+        ["label-direct-trash","direct_trash"],
         ["btn-confirm","confirm_delete"],
         ["btn-restore","restore_last"],
         ["rules-status-title","rules_status"],
@@ -523,10 +540,11 @@ const indexHTML = `<!doctype html>
       document.getElementById('preview').textContent = JSON.stringify(data, null, 2);
     }
     async function confirmDelete() {
-      const ok = confirm(t('confirm_delete_prompt'));
+      const directTrash = document.getElementById('directToTrash').checked;
+      const ok = confirm(t(directTrash ? 'confirm_direct_trash_prompt' : 'confirm_delete_prompt'));
       if (!ok) return;
       const cleanEmptyDirs = document.getElementById('cleanEmptyDirs').checked;
-      const res = await fetch('/api/delete/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanEmptyDirs }) });
+      const res = await fetch('/api/delete/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanEmptyDirs, directToTrash: directTrash }) });
       const data = await res.json();
       document.getElementById('confirm').textContent = JSON.stringify(data, null, 2);
     }
@@ -661,6 +679,7 @@ const indexHTML = `<!doctype html>
       <div class="bar">
         <button id="btn-preview" onclick="previewDelete()">删除预览</button>
         <span class="opt"><label id="label-clean-empty">清空空文件夹</label><input type="checkbox" id="cleanEmptyDirs" checked></span>
+        <span class="opt"><label id="label-direct-trash">直接删除(放入回收站)</label><input type="checkbox" id="directToTrash"></span>
         <button id="btn-confirm" onclick="confirmDelete()">确认删除</button>
         <button id="btn-restore" onclick="restoreLast()">恢复上次删除</button>
       </div>
