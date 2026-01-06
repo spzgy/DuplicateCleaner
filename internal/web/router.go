@@ -228,6 +228,32 @@ func NewRouter() http.Handler {
 		if req.DeleteMode == "" && req.DirectToTrash {
 			req.DeleteMode = "trash"
 		}
+		// 删除前空间检测（备份/回收站）
+		if req.DeleteMode == "backup" || req.DeleteMode == "trash" || req.DeleteMode == "" {
+			var targetDir string
+			var needCheck bool
+			if req.DeleteMode == "trash" {
+				targetDir, needCheck = backup.TrashTargetDir()
+			} else {
+				targetDir, needCheck = backupDir, true
+			}
+			if needCheck {
+				reqSpace, err := backup.RequiredSpaceForCopy(toDelete, targetDir)
+				if err == nil && reqSpace > 0 {
+					free, ferr := backup.FreeSpace(targetDir)
+					if ferr == nil && reqSpace > free {
+						writeJSON(w, map[string]any{
+							"error":     "磁盘空间不足，无法执行删除操作",
+							"mode":      req.DeleteMode,
+							"required":  reqSpace,
+							"free":      free,
+							"targetDir": targetDir,
+						}, http.StatusInsufficientStorage)
+						return
+					}
+				}
+			}
+		}
 		switch req.DeleteMode {
 		case "trash":
 			moved, failed = backup.MoveToTrash(toDelete)
