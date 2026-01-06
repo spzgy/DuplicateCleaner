@@ -1,0 +1,86 @@
+# GoReleaser 配置版本（v2 必填）
+version: 2
+# 项目名称，用于产物命名与展示
+project_name: DuplicateCleaner
+
+# 构建前钩子：在构建前执行 go mod tidy，确保依赖与 go.mod/go.sum 整洁
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # 构建矩阵定义：生成各平台的 duplicatecleaner 二进制
+  - id: server
+    # 主程序入口
+    main: ./cmd/server
+    # 生成的二进制名称（不同平台自动添加扩展名，如 Windows 的 .exe）
+    binary: duplicatecleaner
+    env:
+      # 禁用 CGO，生成纯静态二进制，提升可移植性
+      - CGO_ENABLED=0
+    flags:
+      # 去除二进制中的路径信息，减小体积并提升可复用性
+      - -trimpath
+    ldflags:
+      # -s -w: 去掉调试符号，减小体积
+      # -X main.Version={{.Version}}: 将版本号注入到程序中的 main.Version 变量
+      - -s -w -X main.Version={{.Version}}
+    goos:
+      # 目标操作系统
+      - darwin
+      - linux
+      - windows
+    goarch:
+      # 目标架构
+      - amd64
+      - arm64
+    ignore:
+      # 忽略不支持或不需要的组合（例如 386 架构）
+      - goos: darwin
+        goarch: 386
+      - goos: linux
+        goarch: 386
+
+archives:
+  # 打包配置：为不同平台生成压缩包（Windows 使用 zip，其它平台默认 tar.gz）
+  - id: default
+    # 归档包含的构建 ID（v2 推荐使用 ids 字段）
+    ids:
+      - server
+    format_overrides:
+      - goos: windows
+        # v2 推荐使用复数形式 formats
+        formats: ["zip"]
+    # 压缩包命名模板：项目_版本_系统_架构
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      # 额外包含的文件（许可证与说明文档）
+      - README.md
+      - README.zh-CN.md
+      - LICENSE*
+
+# 校验文件配置：生成 checksums.txt，包含各产物的哈希校验
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  # 变更日志来源：使用 GitHub 的提交历史
+  use: github
+  sort: asc
+  filters:
+    # 过滤掉不影响发行的提交信息
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+
+release:
+  # 发布目标仓库（GitHub Releases）
+  github:
+    owner: "spzgy"
+    name: "DuplicateCleaner"
+  # 是否创建为草稿或预发布
+  draft: false
+  prerelease: false
+  # 模式：如已存在同名 Release，使用 replace 进行替换，避免冲突
+  mode: replace

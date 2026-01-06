@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      # 当推送 v*.*.* 格式的标签时触发（如 v1.0.0）
+      - 'v*.*.*'
+  # 允许手动触发工作流
+  workflow_dispatch:
+
+permissions:
+  # 需要写入权限来创建 Release 和上传产物
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 获取完整的 git 历史记录，这对生成变更日志是必须的
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # 指定 Go 版本
+          go-version: '1.22'
+      - name: Set repo env
+        run: |
+          # 设置仓库所有者和名称的环境变量
+          echo "REPO_OWNER=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
+          echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          # 指定 GoReleaser 版本
+          version: v2.13.2
+          args: release --clean
+        env:
+          # GitHub Token 用于创建 Release 和上传文件
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
