@@ -527,7 +527,7 @@ const indexHTML = `<!doctype html>
       const res = await fetch('/api/scan/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dirs, hashAlgo: algo, skipHidden, skipSystemFiles, followSymlinks, skipSystemDirs, maxWorkers, chunkSizeBytes })
+        body: JSON.stringify({ dirs, hashAlgo: algo, skipHidden, skipSystemFiles, followSymlinks, skipSystemDirs, maxWorkers, chunkSizeBytes, enableHashCache: false, hashCachePath: "" })
       });
       const data = await res.json();
       document.getElementById('status').textContent = JSON.stringify(data, null, 2);
