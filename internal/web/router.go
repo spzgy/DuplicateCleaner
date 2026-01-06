@@ -202,7 +202,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/api/delete/confirm", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			CleanEmptyDirs bool   `json:"cleanEmptyDirs"`
-			DeleteMode     string `json:"deleteMode"`   // "backup" | "trash" | "permanent"
+			DeleteMode     string `json:"deleteMode"`    // "backup" | "trash" | "permanent"
 			DirectToTrash  bool   `json:"directToTrash"` // 兼容旧参数：true 等同于 "trash"
 		}
 		_ = json.NewDecoder(r.Body).Decode(&req)
@@ -347,6 +347,7 @@ const indexHTML = `<!doctype html>
         scan_status: "扫描状态",
         scan_results: "扫描结果",
         delete_rules: "删除规则",
+        delete_mode: "删除模式",
         priority_label: "优先级",
         priority_keep_dirs: "指定文件夹",
         priority_latest_modify: "最新修改",
@@ -394,6 +395,7 @@ const indexHTML = `<!doctype html>
         scan_status: "Status",
         scan_results: "Results",
         delete_rules: "Delete Rules",
+        delete_mode: "Delete Mode",
         priority_label: "Priority",
         priority_keep_dirs: "Prefer Keep Dirs",
         priority_latest_modify: "Latest Modified",
@@ -561,6 +563,7 @@ const indexHTML = `<!doctype html>
       const res = await fetch('/api/delete/preview', { method: 'POST' });
       const data = await res.json();
       document.getElementById('preview').textContent = JSON.stringify(data, null, 2);
+      setDeleteFocus('preview');
     }
     async function confirmDelete() {
       const mode = document.getElementById('deleteMode').value || 'backup';
@@ -571,6 +574,7 @@ const indexHTML = `<!doctype html>
       const res = await fetch('/api/delete/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanEmptyDirs, deleteMode: mode }) });
       const data = await res.json();
       document.getElementById('confirm').textContent = JSON.stringify(data, null, 2);
+      setDeleteFocus('confirm');
     }
     async function restoreLast() {
       const ok = confirm(t('confirm_restore_prompt'));
@@ -578,6 +582,7 @@ const indexHTML = `<!doctype html>
       const res = await fetch('/api/delete/restore', { method: 'POST' });
       const data = await res.json();
       document.getElementById('restore').textContent = JSON.stringify(data, null, 2);
+      setDeleteFocus('restore');
     }
     function debounce(fn, wait) {
       let t = null;
@@ -618,7 +623,31 @@ const indexHTML = `<!doctype html>
       if (sel) sel.addEventListener('change', (e)=>setLang(e.target.value));
       applyI18n();
     }
-    window.onload = () => { initLang(); ping(); ensurePolling(); bindRuleAutoUpdate(); };
+    window.onload = () => {
+      initLang(); ping(); ensurePolling(); bindRuleAutoUpdate();
+      const pt = document.getElementById('preview-title');
+      const ct = document.getElementById('confirm-title');
+      const rt = document.getElementById('restore-title');
+      if (pt) pt.addEventListener('click', ()=>toggleSection('preview'));
+      if (ct) ct.addEventListener('click', ()=>toggleSection('confirm'));
+      if (rt) rt.addEventListener('click', ()=>toggleSection('restore'));
+    };
+    function setDeleteFocus(id) {
+      const ids = ['preview','confirm','restore'];
+      ids.forEach(x => {
+        const el = document.getElementById(x);
+        if (el) el.style.display = (x === id ? 'block' : 'none');
+      });
+      const titleId = id === 'preview' ? 'preview-title' : (id === 'confirm' ? 'confirm-title' : 'restore-title');
+      const titleEl = document.getElementById(titleId);
+      if (titleEl) titleEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function toggleSection(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const cur = el.style.display;
+      el.style.display = (cur === 'none' || cur === '') ? 'block' : 'none';
+    }
   </script>
 </head>
 <body>
